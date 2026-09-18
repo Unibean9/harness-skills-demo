@@ -1,0 +1,16 @@
+# .NET build output
+bin/
+obj/
+
+# User secrets / local overrides
+appsettings.*.local.json
+*.user
+
+# SQLite dev database
+*.db
+*.db-shm
+*.db-wal
+
+# IDE
+.vs/
+.vscode/
