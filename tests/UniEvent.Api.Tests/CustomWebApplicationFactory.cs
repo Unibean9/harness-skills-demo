@@ -11,21 +11,36 @@ namespace UniEvent.Api.Tests;
 /// </summary>
 public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 {
+    public const string SeedOrganizerPassword = "Test!Organizer1";
+
     private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"uni-event-tests-{Guid.NewGuid():N}.db");
+
+    /// <summary>
+    /// Config overrides applied after the defaults; set via an object
+    /// initializer before the first client is created. An empty string
+    /// blanks a key even if user-secrets supplied a value for it.
+    /// </summary>
+    public Dictionary<string, string?> Overrides { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.ConfigureAppConfiguration((_, config) =>
         {
-            config.AddInMemoryCollection(new Dictionary<string, string?>
+            var settings = new Dictionary<string, string?>
             {
                 ["ConnectionStrings:Default"] = $"Data Source={_dbPath}",
                 ["Jwt:Issuer"] = "test-issuer",
                 ["Jwt:Audience"] = "test-audience",
                 ["Jwt:Key"] = "integration-test-signing-key-at-least-32-characters",
                 ["SeedOrganizer:Email"] = "organizer@uni-event.local",
-                ["SeedOrganizer:Password"] = "Test!Organizer1"
-            });
+                ["SeedOrganizer:Password"] = SeedOrganizerPassword
+            };
+            foreach (var (key, value) in Overrides)
+            {
+                settings[key] = value;
+            }
+
+            config.AddInMemoryCollection(settings);
         });
     }
 

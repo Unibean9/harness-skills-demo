@@ -21,7 +21,7 @@ public class AuthController(AppDbContext db, IJwtTokenService jwtTokenService) :
     [HttpPost("register")]
     public async Task<ActionResult<AuthResponse>> Register(RegisterRequest request)
     {
-        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var normalizedEmail = EmailNormalizer.Normalize(request.Email);
 
         if (await db.Users.AnyAsync(u => u.Email == normalizedEmail))
         {
@@ -37,7 +37,23 @@ public class AuthController(AppDbContext db, IJwtTokenService jwtTokenService) :
         user.PasswordHash = PasswordHasher.HashPassword(user, request.Password);
 
         db.Users.Add(user);
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            // The pre-check above is only a fast path: two concurrent requests
+            // can both pass it, and the unique index on Email rejects the loser.
+            // Report that as a duplicate; anything else is a real failure.
+            db.Entry(user).State = EntityState.Detached;
+            if (await db.Users.AnyAsync(u => u.Email == normalizedEmail))
+            {
+                return Conflict(new { message = "Email is already registered." });
+            }
+
+            throw;
+        }
 
         var token = jwtTokenService.CreateToken(user);
         return Created(string.Empty, new AuthResponse(token, user.Id, user.Email, user.Role.ToString()));
@@ -46,7 +62,7 @@ public class AuthController(AppDbContext db, IJwtTokenService jwtTokenService) :
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest request)
     {
-        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var normalizedEmail = EmailNormalizer.Normalize(request.Email);
         var user = await db.Users.SingleOrDefaultAsync(u => u.Email == normalizedEmail);
 
         if (user is null)

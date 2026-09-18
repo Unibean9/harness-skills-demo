@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using UniEvent.Api.Modules.Identity;
 
 namespace UniEvent.Api.Data;
@@ -13,11 +14,14 @@ namespace UniEvent.Api.Data;
 /// </summary>
 public static class SeedData
 {
+    public const string DefaultOrganizerEmail = "organizer@uni-event.local";
+
     public static async Task EnsureDefaultOrganizerAsync(IServiceProvider services)
     {
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(SeedData));
 
         await db.Database.MigrateAsync();
 
@@ -26,10 +30,18 @@ public static class SeedData
             return;
         }
 
-        var email = config["SeedOrganizer:Email"] ?? "organizer@uni-event.local";
-        // Demo-only default; not a production secret. Override via
-        // SeedOrganizer:Password (user-secrets/env) before any real deploy.
-        var password = config["SeedOrganizer:Password"] ?? "ChangeMe!Organizer1";
+        // No built-in password: a default that lives in the repo would be a
+        // working Organizer login on any deploy that forgot to override it.
+        var password = config["SeedOrganizer:Password"];
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            logger.LogWarning(
+                "No Organizer exists and SeedOrganizer:Password is not configured; skipping Organizer seed. " +
+                "Set it via user-secrets or an environment variable (SeedOrganizer__Password).");
+            return;
+        }
+
+        var email = EmailNormalizer.Normalize(config["SeedOrganizer:Email"] ?? DefaultOrganizerEmail);
 
         var organizer = new User
         {
